@@ -17,22 +17,23 @@ class ClienteViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.AllowAny]  # abierto mientras pruebas
 
 class CarteraViewSet(viewsets.ModelViewSet):
+    queryset = Cartera.objects.all().order_by('id')
     serializer_class   = CarteraSerializer
     permission_classes = [permissions.AllowAny]
 
-    def get_queryset(self) -> QuerySet:
-        user = self.request.user
-        qs = Cartera.objects.all().order_by('-created_at')
-        if user.is_superuser or user.groups.filter(name='admin').exists():
-            return qs
-        # solo carteras donde es miembro
-        return qs.filter(asignaciones__usuario=user).distinct()
+    # def get_queryset(self) -> QuerySet:
+    #     user = self.request.user
+    #     qs = Cartera.objects.all().order_by('-created_at')
+    #     if user.is_superuser or user.groups.filter(name='admin').exists():
+    #         return qs
+    #     # solo carteras donde es miembro
+    #     return qs.filter(asignaciones__usuario=user).distinct()
 
     # create: permitido por IsSystemAdmin (via has_permission)
-    def create(self, request, *args, **kwargs):
-        if not IsSystemAdmin().has_permission(request, self):
-            return Response({'detail': 'Solo admin puede crear carteras.'}, status=status.HTTP_403_FORBIDDEN)
-        return super().create(request, *args, **kwargs)
+    # def create(self, request, *args, **kwargs):
+    #     if not IsSystemAdmin().has_permission(request, self):
+    #         return Response({'detail': 'Solo admin puede crear carteras.'}, status=status.HTTP_403_FORBIDDEN)
+    #     return super().create(request, *args, **kwargs)
 
     # update/partial_update/destroy: también solo admin (en has_object_permission lo negamos a no-admin)
     # Si quieres permitir a gestores editar descripción, ajusta el permiso.
@@ -60,16 +61,17 @@ class CarteraViewSet(viewsets.ModelViewSet):
         return Response({'ok': True})
     
 class PrestamoViewSet(viewsets.ModelViewSet):
+    queryset = Prestamo.objects.all().order_by('-created_at')
     serializer_class   = PrestamoSerializer
     permission_classes = [permissions.AllowAny]
 
-    def get_queryset(self) -> QuerySet:
-        user = self.request.user
-        qs = Prestamo.objects.select_related('cliente','cartera').order_by('-created_at')
-        if es_admin(user):
-            return qs
-        # solo de carteras donde el user es miembro
-        return qs.filter(cartera__asignaciones__usuario=user).distinct()
+    # def get_queryset(self) -> QuerySet:
+    #     user = self.request.user
+    #     qs = Prestamo.objects.select_related('cliente','cartera').order_by('-created_at')
+    #     if es_admin(user):
+    #         return qs
+    #     # solo de carteras donde el user es miembro
+    #     return qs.filter(cartera__asignaciones__usuario=user).distinct()
 
 class PagoViewSet(viewsets.ModelViewSet):
     serializer_class   = PagoSerializer
