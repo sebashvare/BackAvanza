@@ -2,6 +2,7 @@
 from rest_framework import serializers
 from .models import Cliente, Cartera, CarteraMiembro, Prestamo, Pago
 from django.contrib.auth import get_user_model
+from django.db.models import Sum 
 
 User = get_user_model()
 
@@ -50,7 +51,7 @@ class PrestamoSerializer(serializers.ModelSerializer):
 
     def get_saldo(self, obj: Prestamo):
         # Saldo simple: monto - suma(capital_pagado)
-        total_capital = obj.pagos.aggregate(s=models.Sum('capital_pagado'))['s'] or 0
+        total_capital = obj.pagos.aggregate(s=Sum('capital_pagado'))['s'] or 0
         return float(obj.monto) - float(total_capital)
 
     def validate(self, data):

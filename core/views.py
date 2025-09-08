@@ -7,18 +7,23 @@ from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from rest_framework.decorators import action
 from .permissions import IsCarteraMemberOrAdmin, IsSystemAdmin, IsMemberOfCarteraOrAdmin,es_admin
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
 
 
 User = get_user_model()
-
+@method_decorator(csrf_exempt, name='dispatch')
 class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all().order_by('-created_at')
     serializer_class = ClienteSerializer
+    authentication_classes = [] 
     permission_classes = [permissions.AllowAny]  # abierto mientras pruebas
 
 class CarteraViewSet(viewsets.ModelViewSet):
     queryset = Cartera.objects.all().order_by('id')
     serializer_class   = CarteraSerializer
+    authentication_classes = [] 
     permission_classes = [permissions.AllowAny]
 
     # def get_queryset(self) -> QuerySet:
@@ -63,6 +68,7 @@ class CarteraViewSet(viewsets.ModelViewSet):
 class PrestamoViewSet(viewsets.ModelViewSet):
     queryset = Prestamo.objects.all().order_by('-created_at')
     serializer_class   = PrestamoSerializer
+    authentication_classes = [] 
     permission_classes = [permissions.AllowAny]
 
     # def get_queryset(self) -> QuerySet:

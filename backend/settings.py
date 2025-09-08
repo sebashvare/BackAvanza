@@ -131,13 +131,27 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 INSTALLED_APPS += ['corsheaders']
 MIDDLEWARE = ['corsheaders.middleware.CorsMiddleware', *MIDDLEWARE]
-CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+# CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+]
+
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    # si a veces usas 5174 en dev
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+]
 
 REST_FRAMEWORK = {
     # ✅ Dev: todo abierto para que puedas probar CRUDs sin login
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",
+        # "rest_framework.permissions.AllowAny",
     ],
     # ✅ Autenticaciones VÁLIDAS (no pongas AllowAny aquí)
     "DEFAULT_AUTHENTICATION_CLASSES": [
