@@ -1,12 +1,14 @@
 # core/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ClienteViewSet, CarteraViewSet, PrestamoViewSet, PagoViewSet
+from .views import ClienteViewSet, CarteraViewSet, PrestamoViewSet, PagoViewSet, InteresViewSet, PrestamoViewSet, CuotaViewSet, PagoViewSet
 from rest_framework_simplejwt.views import (TokenObtainPairView, TokenRefreshView, TokenVerifyView)
 
 router = DefaultRouter()
 router.register('carteras', CarteraViewSet, basename='carteras')
 router.register('clientes', ClienteViewSet, basename='clientes')
+router.register('intereses', InteresViewSet, basename='interes')
+router.register('cuotas', CuotaViewSet, basename='cuota')
 router.register('prestamos', PrestamoViewSet, basename='prestamos')
 router.register('pagos',    PagoViewSet,    basename='pagos')
 

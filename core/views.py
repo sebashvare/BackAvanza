@@ -1,18 +1,23 @@
 # core/views.py
 from rest_framework import viewsets, permissions,status
 from django.db.models import QuerySet
-from .models import Cliente, Cartera, Pago, Prestamo
-from .serializers import ClienteSerializer, CarteraSerializer, PrestamoSerializer, PagoSerializer
+from .models import Cliente, Cartera, Pago, Prestamo, Interes, Prestamo, Cuota, Pago
+from .serializers import ClienteSerializer, CarteraSerializer, PrestamoSerializer, PagoSerializer, InteresSerializer, PrestamoSerializer, CuotaSerializer, PagoSerializer
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from rest_framework.decorators import action
 from .permissions import IsCarteraMemberOrAdmin, IsSystemAdmin, IsMemberOfCarteraOrAdmin,es_admin
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-
+from .services import generar_calendario, aplicar_pago, actualizar_estado_por_mora
 
 
 User = get_user_model()
+
+
+class InteresViewSet(viewsets.ModelViewSet):
+    queryset = Interes.objects.all().order_by('nombre')
+    serializer_class = InteresSerializer
 @method_decorator(csrf_exempt, name='dispatch')
 class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all().order_by('-created_at')
@@ -66,18 +71,33 @@ class CarteraViewSet(viewsets.ModelViewSet):
         return Response({'ok': True})
     
 class PrestamoViewSet(viewsets.ModelViewSet):
-    queryset = Prestamo.objects.all().order_by('-created_at')
-    serializer_class   = PrestamoSerializer
-    authentication_classes = [] 
-    permission_classes = [permissions.AllowAny]
+    queryset = Prestamo.objects.select_related('cliente','cartera','interes')
+    serializer_class = PrestamoSerializer
 
-    # def get_queryset(self) -> QuerySet:
-    #     user = self.request.user
-    #     qs = Prestamo.objects.select_related('cliente','cartera').order_by('-created_at')
-    #     if es_admin(user):
-    #         return qs
-    #     # solo de carteras donde el user es miembro
-    #     return qs.filter(cartera__asignaciones__usuario=user).distinct()
+    def perform_create(self, serializer):
+        prestamo = serializer.save()
+        generar_calendario(prestamo)
+
+    @action(detail=True, methods=['post'])
+    def regenerar_calendario(self, request, pk=None):
+        prestamo = self.get_object()
+        generar_calendario(prestamo)
+        return Response({'detail': 'Calendario regenerado'})
+
+    @action(detail=True, methods=['post'])
+    def actualizar_mora(self, request, pk=None):
+        prestamo = self.get_object()
+        actualizar_estado_por_mora(prestamo)
+        return Response({'detail': 'Estado de mora actualizado'})
+
+class CuotaViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = CuotaSerializer
+    def get_queryset(self):
+        qs = Cuota.objects.select_related('prestamo')
+        prestamo_id = self.request.query_params.get('prestamo')
+        if prestamo_id:
+            qs = qs.filter(prestamo_id=prestamo_id).order_by('numero')
+        return qs
 
 class PagoViewSet(viewsets.ModelViewSet):
     serializer_class   = PagoSerializer
@@ -89,3 +109,4 @@ class PagoViewSet(viewsets.ModelViewSet):
         if es_admin(user):
             return qs
         return qs.filter(prestamo__cartera__asignaciones__usuario=user).distinct()
+

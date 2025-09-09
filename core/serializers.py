@@ -1,6 +1,6 @@
 # core/serializers.py
 from rest_framework import serializers
-from .models import Cliente, Cartera, CarteraMiembro, Prestamo, Pago
+from .models import Cliente, Cartera, CarteraMiembro, Prestamo, Pago, Interes, Prestamo, Cuota, Pago, PagoDetalle
 from django.contrib.auth import get_user_model
 from django.db.models import Sum 
 
@@ -10,7 +10,6 @@ class ClienteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cliente
         fields = '__all__'
-
 class CarteraMiembroSerializer(serializers.ModelSerializer):
     usuario_email = serializers.EmailField(source='usuario.email', read_only=True)
     usuario_id    = serializers.PrimaryKeyRelatedField(source='usuario', read_only=True)
@@ -18,11 +17,9 @@ class CarteraMiembroSerializer(serializers.ModelSerializer):
     class Meta:
         model  = CarteraMiembro
         fields = ('id', 'usuario_id', 'usuario_email', 'rol', 'creado')
-        
 class CarteraAsignarMiembroSerializer(serializers.Serializer):
     usuario_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), source='usuario')
     rol        = serializers.ChoiceField(choices=CarteraMiembro.RolEnCartera.choices, default=CarteraMiembro.RolEnCartera.GESTOR)
-
 class CarteraSerializer(serializers.ModelSerializer):
     # Solo lectura: listamos miembros
     miembros = serializers.SerializerMethodField()
@@ -35,9 +32,7 @@ class CarteraSerializer(serializers.ModelSerializer):
     def get_miembros(self, obj: Cartera):
         asignaciones = obj.asignaciones.select_related('usuario').all()
         return CarteraMiembroSerializer(asignaciones, many=True).data
-
-
-
+    
 class PrestamoSerializer(serializers.ModelSerializer):
     cliente_nombre = serializers.CharField(source='cliente.nombre', read_only=True)
     cartera_nombre = serializers.CharField(source='cartera.nombre', read_only=True)
@@ -62,7 +57,7 @@ class PrestamoSerializer(serializers.ModelSerializer):
         if data.get('plazo_meses') is not None and data['plazo_meses'] <= 0:
             raise serializers.ValidationError('plazo_meses debe ser > 0')
         return data
-
+    
 class PagoSerializer(serializers.ModelSerializer):
     prestamo_info = serializers.SerializerMethodField()
 
@@ -90,3 +85,33 @@ class PagoSerializer(serializers.ModelSerializer):
         if (c + i + mo) > m:
             raise serializers.ValidationError('capital + interés + mora no deben exceder monto')
         return data
+    
+class InteresSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Interes
+        fields = '__all__'
+
+class CuotaSerializer(serializers.ModelSerializer):
+    saldo_capital = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    saldo_interes = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = Cuota
+        fields = '__all__'
+
+class PrestamoSerializer(serializers.ModelSerializer):
+    cuotas = CuotaSerializer(many=True, read_only=True)
+    class Meta:
+        model = Prestamo
+        fields = '__all__'
+
+class PagoDetalleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PagoDetalle
+        fields = '__all__'
+
+class PagoSerializer(serializers.ModelSerializer):
+    detalles = PagoDetalleSerializer(many=True, read_only=True)
+    class Meta:
+        model = Pago
+        fields = '__all__'
