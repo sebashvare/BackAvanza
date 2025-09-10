@@ -100,13 +100,13 @@ class CuotaViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
 class PagoViewSet(viewsets.ModelViewSet):
-    serializer_class   = PagoSerializer
-    permission_classes = [permissions.AllowAny]
+    queryset = Pago.objects.select_related('prestamo')
+    serializer_class = PagoSerializer
 
-    def get_queryset(self) -> QuerySet:
-        user = self.request.user
-        qs = Pago.objects.select_related('prestamo','prestamo__cartera','prestamo__cliente').order_by('-created_at')
-        if es_admin(user):
-            return qs
-        return qs.filter(prestamo__cartera__asignaciones__usuario=user).distinct()
+    def create(self, request, *args, **kwargs):
+        resp = super().create(request, *args, **kwargs)
+        pago = Pago.objects.get(pk=resp.data['id'])
+        aplicar_pago(pago)
+        serializer = self.get_serializer(pago)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 

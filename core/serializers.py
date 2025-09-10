@@ -1,4 +1,5 @@
 # core/serializers.py
+from decimal import Decimal
 from rest_framework import serializers
 from .models import Cliente, Cartera, CarteraMiembro, Prestamo, Pago, Interes, Prestamo, Cuota, Pago, PagoDetalle
 from django.contrib.auth import get_user_model
@@ -101,9 +102,11 @@ class CuotaSerializer(serializers.ModelSerializer):
 
 class PrestamoSerializer(serializers.ModelSerializer):
     cuotas = CuotaSerializer(many=True, read_only=True)
+    interes = InteresSerializer(read_only=True) 
+    interes_id = serializers.PrimaryKeyRelatedField(source="interes", queryset=Interes.objects.all(), write_only=True)
     class Meta:
         model = Prestamo
-        fields = '__all__'
+        fields = "__all__"
 
 class PagoDetalleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -112,6 +115,39 @@ class PagoDetalleSerializer(serializers.ModelSerializer):
 
 class PagoSerializer(serializers.ModelSerializer):
     detalles = PagoDetalleSerializer(many=True, read_only=True)
+    detalles = PagoDetalleSerializer(many=True, read_only=True)
+
     class Meta:
         model = Pago
         fields = '__all__'
+
+    def validate(self, attrs):
+        prestamo: Prestamo = attrs.get('prestamo')
+        monto = Decimal(str(attrs.get('monto', 0)))
+
+        if prestamo is None:
+            raise serializers.ValidationError("Debe indicar el préstamo.")
+
+        # Asegúrate de tener saldos actualizados antes (opcional si los mantienes al día)
+        # Si quieres, puedes recalcular aquí: _recalcular_saldos_prestamo(prestamo)
+
+        # 1) Si el préstamo ya está pagado, rechazar
+        if prestamo.estado == Prestamo.Estado.PAGADO:
+            raise serializers.ValidationError("El préstamo ya está pagado. No se aceptan más pagos.")
+
+        # 2) Si el saldo total es 0, rechazar (por si el estado aún no se actualizó)
+        saldo_total = (prestamo.saldo_capital or 0) + (prestamo.saldo_interes or 0)
+        if Decimal(saldo_total) <= 0:
+            raise serializers.ValidationError("El préstamo no tiene saldo pendiente. No se aceptan más pagos.")
+
+        # 3) (opcional) Evitar sobrepago: monto > saldo_total
+        if monto > Decimal(saldo_total):
+            raise serializers.ValidationError(
+                f"El monto ({monto}) excede el saldo ({saldo_total}). "
+                "Registre un pago por el saldo exacto."
+            )
+
+        if monto <= 0:
+            raise serializers.ValidationError("El monto del pago debe ser mayor a 0.")
+
+        return attrs
