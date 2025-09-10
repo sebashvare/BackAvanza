@@ -151,12 +151,12 @@ CSRF_TRUSTED_ORIGINS = [
 REST_FRAMEWORK = {
     # ✅ Dev: todo abierto para que puedas probar CRUDs sin login
     "DEFAULT_PERMISSION_CLASSES": [
-        # "rest_framework.permissions.AllowAny",
+         "rest_framework.permissions.AllowAny",
     ],
     # ✅ Autenticaciones VÁLIDAS (no pongas AllowAny aquí)
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.BasicAuthentication",
+        # "rest_framework.authentication.SessionAuthentication",
+        # "rest_framework.authentication.BasicAuthentication",
         # Luego, cuando cierres, agregas JWT/Token:
         # "rest_framework_simplejwt.authentication.JWTAuthentication",
         # "rest_framework.authentication.TokenAuthentication",

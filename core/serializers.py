@@ -101,9 +101,10 @@ class CuotaSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class PrestamoSerializer(serializers.ModelSerializer):
-    cuotas = CuotaSerializer(many=True, read_only=True)
+    cuotas  = CuotaSerializer(many=True, read_only=True)
     interes = InteresSerializer(read_only=True) 
     interes_id = serializers.PrimaryKeyRelatedField(source="interes", queryset=Interes.objects.all(), write_only=True)
+    cliente = ClienteSerializer(read_only=True) 
     class Meta:
         model = Prestamo
         fields = "__all__"
