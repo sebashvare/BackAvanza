@@ -102,9 +102,13 @@ class CuotaSerializer(serializers.ModelSerializer):
 
 class PrestamoSerializer(serializers.ModelSerializer):
     cuotas  = CuotaSerializer(many=True, read_only=True)
-    interes = InteresSerializer(read_only=True) 
-    interes_id = serializers.PrimaryKeyRelatedField(source="interes", queryset=Interes.objects.all(), write_only=True)
+    interes = InteresSerializer(read_only=True)
+    cartera = CarteraSerializer(read_only=True)
     cliente = ClienteSerializer(read_only=True) 
+    interes_id = serializers.PrimaryKeyRelatedField(source="interes", queryset=Interes.objects.all(), write_only=True)
+    cliente_id = serializers.PrimaryKeyRelatedField(source="cliente", queryset=Cliente.objects.all(), write_only=True)
+    cartera_id = serializers.PrimaryKeyRelatedField(source="cartera", queryset=Cartera.objects.all(), write_only=True)
+
     class Meta:
         model = Prestamo
         fields = "__all__"
