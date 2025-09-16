@@ -52,6 +52,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',   
+    "corsheaders.middleware.CorsMiddleware",
 ]
 
 ROOT_URLCONF = 'backend.urls'
@@ -130,7 +131,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 INSTALLED_APPS += ['corsheaders']
-MIDDLEWARE = ['corsheaders.middleware.CorsMiddleware', *MIDDLEWARE]
+
 # CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
@@ -152,13 +153,14 @@ REST_FRAMEWORK = {
     # ✅ Dev: todo abierto para que puedas probar CRUDs sin login
     "DEFAULT_PERMISSION_CLASSES": [
          "rest_framework.permissions.AllowAny",
+         
     ],
     # ✅ Autenticaciones VÁLIDAS (no pongas AllowAny aquí)
     "DEFAULT_AUTHENTICATION_CLASSES": [
         # "rest_framework.authentication.SessionAuthentication",
         # "rest_framework.authentication.BasicAuthentication",
         # Luego, cuando cierres, agregas JWT/Token:
-        # "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         # "rest_framework.authentication.TokenAuthentication",
     ],
 }

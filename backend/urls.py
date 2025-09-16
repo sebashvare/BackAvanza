@@ -24,6 +24,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import (TokenObtainPairView, TokenRefreshView, TokenVerifyView)
 from rest_framework.decorators import api_view, permission_classes
+from core.views import me_view
 
 User = get_user_model()
 
@@ -53,5 +54,9 @@ def whoami(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('core.urls')),
+    path('api/token/', TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path('api/token/refresh/', TokenObtainPairView.as_view(), name="token_refresh"),
+    path("api/me/", me_view, name="me"),  
+    
     
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

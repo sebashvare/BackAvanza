@@ -5,7 +5,7 @@ from .models import Cliente, Cartera, Pago, Prestamo, Interes, Prestamo, Cuota, 
 from .serializers import ClienteSerializer, CarteraSerializer, PrestamoSerializer, PagoSerializer, InteresSerializer, PrestamoSerializer, CuotaSerializer, PagoSerializer
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from .permissions import IsCarteraMemberOrAdmin, IsSystemAdmin, IsMemberOfCarteraOrAdmin,es_admin
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -110,3 +110,16 @@ class PagoViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(pago)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def me_view(request):
+    u = request.user
+    return Response({
+        "id": u.id,
+        "username": u.username,
+        "first_name": u.first_name,
+        "last_name": u.last_name,
+        "email": u.email,
+        # Aquí luego puedes incluir grupos/permisos si los usas
+        # "groups": list(u.groups.values_list("name", flat=True)),
+    })
