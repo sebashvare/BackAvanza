@@ -103,15 +103,25 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Django 4.2+ storage API (recomendado)
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
-    }
-}
+# settings.py (fragmento)
 
-# --- Media (si lo usas)
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+STORAGES = {
+    
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    
+        "OPTIONS": {
+            "location": str(MEDIA_ROOT)
+        }
+    },
+    
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
