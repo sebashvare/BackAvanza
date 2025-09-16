@@ -26,7 +26,12 @@ SECRET_KEY = 'django-insecure-#g7l7(=#rsx30xnv_d)ucx5v58n8e@rlj111)yf=9o(l(%^+@t
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    h.strip() for h in os.getenv(
+        "ALLOWED_HOSTS",
+        "localhost,127.0.0.1,backavanza.onrender.com"
+    ).split(",") if h.strip()
+]
 
 
 # Application definition
@@ -146,20 +151,33 @@ MEDIA_ROOT = BASE_DIR / 'media'
 INSTALLED_APPS += ['corsheaders']
 
 # CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+# CORS_ALLOWED_ORIGINS = [
+#     'http://localhost:5173',
+#     'http://127.0.0.1:5173',
+#     'http://localhost:5174',
+#     'http://127.0.0.1:5174',
+# ]
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5174',
+    o.strip() for o in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "https://front-avanza.vercel.app"
+    ).split(",") if o.strip()
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+# CSRF_TRUSTED_ORIGINS = [
+#     'http://localhost:5173',
+#     'http://127.0.0.1:5173',
+#     # si a veces usas 5174 en dev
+#     'http://localhost:5174',
+#     'http://127.0.0.1:5174',
+# ]
+
 CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    # si a veces usas 5174 en dev
-    'http://localhost:5174',
-    'http://127.0.0.1:5174',
+    u.strip() for u in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "https://backavanza.onrender.com,https://front-avanza.vercel.app"
+    ).split(",") if u.strip()
 ]
 
 REST_FRAMEWORK = {
@@ -183,3 +201,9 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
+
+# SSL/seguridad detrás de proxy de Render
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
