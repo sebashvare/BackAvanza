@@ -1,6 +1,7 @@
 # core/views.py
 from rest_framework import viewsets, permissions,status
 from django.db.models import QuerySet
+from django.db import connection
 from .models import Cliente, Cartera, Pago, Prestamo, Interes, Prestamo, Cuota, Pago
 from .serializers import ClienteSerializer, CarteraSerializer, PrestamoSerializer, PagoSerializer, InteresSerializer, PrestamoSerializer, CuotaSerializer, PagoSerializer
 from rest_framework.response import Response
@@ -123,3 +124,76 @@ def me_view(request):
         # Aquí luego puedes incluir grupos/permisos si los usas
         # "groups": list(u.groups.values_list("name", flat=True)),
     })
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])  # Ajusta según tus necesidades de permisos
+def dashboard_view(request):
+    """
+    Endpoint para obtener métricas del dashboard:
+    - Dinero disponible (total cobrado)
+    - Cartera por cobrar contable
+    - Saldo contractual pendiente
+    - Clientes activos
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH
+            pagos AS (
+              SELECT 
+                SUM(COALESCE(d.capital_aplicado,0) + COALESCE(d.interes_aplicado,0)) AS cobrado_total
+              FROM pagos_detalle d
+            ),
+            cuotas_base AS (
+              SELECT
+                c.id,
+                c.capital_programado,
+                c.interes_programado,
+                c.fecha_vencimiento,
+                COALESCE(pd.cap_apl, 0) AS cap_apl,
+                COALESCE(pd.int_apl, 0) AS int_apl
+              FROM cuotas c
+              LEFT JOIN (
+                SELECT 
+                  cuota_id,
+                  SUM(COALESCE(capital_aplicado,0)) AS cap_apl,
+                  SUM(COALESCE(interes_aplicado,0)) AS int_apl
+                FROM pagos_detalle
+                GROUP BY cuota_id
+              ) pd ON pd.cuota_id = c.id
+            ),
+            saldos AS (
+              SELECT
+                SUM(capital_programado - cap_apl) AS saldo_capital_pendiente,
+                SUM(CASE WHEN DATE(fecha_vencimiento) <= CURRENT_DATE
+                         THEN interes_programado - int_apl
+                         ELSE 0 END) AS interes_devengado_pendiente,
+                SUM((capital_programado - cap_apl) + (interes_programado - int_apl)) AS saldo_contractual_pendiente
+              FROM cuotas_base
+            )
+            SELECT
+              COALESCE((SELECT cobrado_total FROM pagos), 0)                                           AS dinero_disponible,
+              COALESCE(saldo_capital_pendiente, 0) + COALESCE(interes_devengado_pendiente, 0)         AS cartera_por_cobrar_contable,
+              COALESCE(saldo_contractual_pendiente, 0)                                                AS saldo_contractual_pendiente,
+              (SELECT COUNT(*) FROM clientes WHERE activo IS TRUE)                                     AS clientes_activos
+            FROM saldos;
+        """)
+        
+        row = cursor.fetchone()
+        
+        if row:
+            data = {
+                'dinero_disponible': float(row[0]) if row[0] else 0.0,
+                'cartera_por_cobrar_contable': float(row[1]) if row[1] else 0.0,
+                'saldo_contractual_pendiente': float(row[2]) if row[2] else 0.0,
+                'clientes_activos': int(row[3]) if row[3] else 0
+            }
+        else:
+            # Valores por defecto si no hay datos
+            data = {
+                'dinero_disponible': 0.0,
+                'cartera_por_cobrar_contable': 0.0,
+                'saldo_contractual_pendiente': 0.0,
+                'clientes_activos': 0
+            }
+    
+    return Response(data)
