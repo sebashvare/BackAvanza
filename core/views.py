@@ -75,6 +75,22 @@ class PrestamoViewSet(viewsets.ModelViewSet):
     queryset = Prestamo.objects.select_related('cliente','cartera','interes')
     serializer_class = PrestamoSerializer
 
+    def list(self, request, *args, **kwargs):
+        """Lista préstamos actualizando estados automáticamente"""
+        from .services import actualizar_estados_cuotas, actualizar_estados_prestamos
+        # Actualizar estados antes de mostrar la lista
+        actualizar_estados_cuotas()
+        actualizar_estados_prestamos()
+        return super().list(request, *args, **kwargs)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Obtiene un préstamo específico actualizando estados"""
+        from .services import actualizar_estados_cuotas, actualizar_estados_prestamos
+        # Actualizar estados antes de mostrar el préstamo
+        actualizar_estados_cuotas()
+        actualizar_estados_prestamos()
+        return super().retrieve(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         prestamo = serializer.save()
         generar_calendario(prestamo)
@@ -93,6 +109,14 @@ class PrestamoViewSet(viewsets.ModelViewSet):
 
 class CuotaViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CuotaSerializer
+    
+    def list(self, request, *args, **kwargs):
+        """Lista cuotas actualizando estados automáticamente"""
+        from .services import actualizar_estados_cuotas
+        # Actualizar estados de cuotas antes de mostrar la lista
+        actualizar_estados_cuotas()
+        return super().list(request, *args, **kwargs)
+    
     def get_queryset(self):
         qs = Cuota.objects.select_related('prestamo')
         prestamo_id = self.request.query_params.get('prestamo')
@@ -124,6 +148,85 @@ def me_view(request):
         # Aquí luego puedes incluir grupos/permisos si los usas
         # "groups": list(u.groups.values_list("name", flat=True)),
     })
+
+@api_view(["GET", "POST"])
+@permission_classes([permissions.AllowAny])
+def actualizar_estados_view(request):
+    """
+    Vista para actualizar automáticamente los estados de préstamos y cuotas.
+    GET: Muestra estadísticas generales de estados
+    POST: Ejecuta la actualización automática de estados
+    """
+    try:
+        from .services import actualizar_estados_prestamos, actualizar_estados_cuotas
+        from .models import Prestamo, Cuota
+        from datetime import date
+        
+        if request.method == "POST":
+            # Ejecutar actualización de estados
+            print("🔄 Iniciando actualización automática de estados...")
+            
+            # Actualizar estados de cuotas y préstamos
+            cuotas_mora, cuotas_pagadas = actualizar_estados_cuotas()
+            prestamos_mora, prestamos_pagados = actualizar_estados_prestamos()
+            
+            return Response({
+                'success': True,
+                'message': 'Estados actualizados correctamente',
+                'fecha_actualizacion': date.today().isoformat(),
+                'resultados': {
+                    'cuotas': {
+                        'actualizadas_a_mora': cuotas_mora,
+                        'actualizadas_a_pagada': cuotas_pagadas
+                    },
+                    'prestamos': {
+                        'actualizados_a_mora': prestamos_mora,
+                        'actualizados_a_pagado': prestamos_pagados
+                    },
+                    'total_actualizaciones': cuotas_mora + cuotas_pagadas + prestamos_mora + prestamos_pagados
+                }
+            })
+        else:
+            # GET: Mostrar estadísticas actuales
+            fecha_hoy = date.today()
+            
+            # Estadísticas de cuotas
+            cuotas_vencidas_pendientes = Cuota.objects.filter(
+                fecha_vencimiento__lt=fecha_hoy,
+                estado=Cuota.Estado.PENDIENTE
+            ).count()
+            
+            # Estadísticas de préstamos
+            prestamos_con_mora = Prestamo.objects.filter(
+                estado=Prestamo.Estado.PENDIENTE,
+                cuotas__fecha_vencimiento__lt=fecha_hoy,
+                cuotas__estado__in=[Cuota.Estado.PENDIENTE, Cuota.Estado.MORA]
+            ).distinct().count()
+            
+            total_prestamos_activos = Prestamo.objects.filter(
+                estado__in=[Prestamo.Estado.PENDIENTE, Prestamo.Estado.MORA]
+            ).count()
+            
+            return Response({
+                'fecha_consulta': fecha_hoy.isoformat(),
+                'estadisticas': {
+                    'cuotas_vencidas_pendientes': cuotas_vencidas_pendientes,
+                    'prestamos_con_mora_potencial': prestamos_con_mora,
+                    'total_prestamos_activos': total_prestamos_activos
+                },
+                'acciones': {
+                    'actualizar_estados': 'POST a esta URL para ejecutar actualización automática',
+                    'descripcion': 'Actualiza cuotas vencidas a MORA y préstamos con cuotas en mora'
+                }
+            })
+            
+    except Exception as e:
+        import traceback
+        return Response({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }, status=500)
 
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])  # Ajusta según tus necesidades de permisos
