@@ -3,6 +3,11 @@ from pathlib import Path
 import os
 import dj_database_url
 from datetime import timedelta
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env (solo en desarrollo)
+if os.path.exists(Path(__file__).resolve().parent.parent / '.env'):
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
 
 # --- Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -11,7 +16,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # En Render: define SECRET_KEY en Environment
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-key")  # <-- cámbiala en prod
 
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+# Detectar entorno: True si estamos en desarrollo local
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
 # Hosts permitidos (Render + Vercel + localhost)
 ALLOWED_HOSTS = [
@@ -32,6 +38,10 @@ INSTALLED_APPS = [
 
     "rest_framework",
     # "django.contrib.postgres",  # déjalo si lo usas explícitamente
+    
+    # Cloudinary DEBE ir antes de otros apps que usen archivos
+    "cloudinary_storage",
+    "cloudinary",
 
     "corsheaders",
     "core",
@@ -80,7 +90,7 @@ DATABASES = {
     "default": dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600,
-        ssl_require=not DEBUG,  # en prod True; en local False
+        # ssl_require=not DEBUG,  # en prod True; en local False
     )
 }
 
@@ -102,26 +112,59 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Django 4.2+ storage API (recomendado)
-# settings.py (fragmento)
+# --- Configuración de almacenamiento de archivos media
+# Detecta automáticamente si estamos en Render (producción) o localhost (desarrollo)
+USE_CLOUDINARY = os.getenv("USE_CLOUDINARY", "False").lower() == "true"
 
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
-
-STORAGES = {
+if USE_CLOUDINARY:
+    # ========================================
+    # PRODUCCIÓN: Cloudinary
+    # ========================================
+    print("✅ [PRODUCCIÓN] Configurando Cloudinary para archivos media")
     
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
+        'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
+        'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
+    }
     
-        "OPTIONS": {
-            "location": str(MEDIA_ROOT)
-        }
-    },
+    # Configuración para Django 4.2+
+    STORAGES = {
+        "default": {
+            "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        },
+    }
     
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
-    },
-}
+    # URLs de archivos media
+    MEDIA_URL = '/media/'  # Cloudinary maneja la URL real
+    
+    print(f"   Cloud Name: {os.getenv('CLOUDINARY_CLOUD_NAME', '❌ NO CONFIGURADO')}")
+    
+else:
+    # ========================================
+    # DESARROLLO LOCAL: FileSystem
+    # ========================================
+    print("⚠️  [DESARROLLO] Usando almacenamiento LOCAL para archivos media")
+    
+    MEDIA_URL = "/media/"
+    MEDIA_ROOT = BASE_DIR / "media"
+    
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+            "OPTIONS": {
+                "location": str(MEDIA_ROOT)
+            }
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        },
+    }
+    
+    print(f"   Ruta: {MEDIA_ROOT}")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -130,9 +173,9 @@ CORS_ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv(
         "CORS_ALLOWED_ORIGINS",
         # Prod:
-        "https://front-avanza.vercel.app"
+        # "https://front-avanza.vercel.app"
         # Dev (descomenta estas para localhost):
-        # ",http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
+        ",http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
     ).split(",") if o.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
@@ -169,13 +212,33 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
-# --- Seguridad detrás del proxy de Render
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = not DEBUG
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
-
-# Si usas cookies cross-site (front en Vercel):
-SESSION_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
-CSRF_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
+# --- Seguridad y configuración según entorno
+if DEBUG:
+    # ========================================
+    # DESARROLLO LOCAL (localhost)
+    # ========================================
+    print("🔧 [DESARROLLO] Configuración de seguridad relajada para localhost")
+    
+    # Sin redirección SSL ni configuraciones de seguridad estrictas
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
+    
+else:
+    # ========================================
+    # PRODUCCIÓN (Render + Vercel)
+    # ========================================
+    print("🔒 [PRODUCCIÓN] Configuración de seguridad estricta activada")
+    
+    # Configuración de seguridad detrás del proxy de Render
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    
+    # Cookies cross-site (front en Vercel, backend en Render)
+    SESSION_COOKIE_SAMESITE = "None"
+    CSRF_COOKIE_SAMESITE = "None"
 
