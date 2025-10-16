@@ -8,9 +8,65 @@ from django.db.models import Sum
 User = get_user_model()
 
 class ClienteSerializer(serializers.ModelSerializer):
+    # URLs seguras para visualización de imágenes (solo lectura)
+    foto_cedula_secure_url = serializers.SerializerMethodField()
+    foto_cliente_secure_url = serializers.SerializerMethodField()
+    foto_cedula_reverso_secure_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = Cliente
-        fields = '__all__'
+        fields = [
+            'id', 'nombre', 'identificacion', 'telefono', 'direccion', 'direccion_laboral',
+            'activo', 'garante_nombre', 'garante_telefono', 'created_at', 'updated_at',
+            # Campos originales de archivos (para subida)
+            'foto_cedula', 'foto_cliente', 'foto_cedula_reverso',
+            # URLs seguras (para visualización)
+            'foto_cedula_secure_url', 'foto_cliente_secure_url', 'foto_cedula_reverso_secure_url'
+        ]
+    
+    def _get_secure_url(self, image_field):
+        """Helper para generar URLs seguras"""
+        if not image_field:
+            return None
+            
+        request = self.context.get('request')
+        if not request:
+            return None
+        
+        from django.conf import settings
+        image_url = str(image_field)
+        
+        if settings.USE_CLOUDINARY and 'cloudinary.com' in image_url:
+            # Extraer path de URL de Cloudinary
+            # Ejemplo: https://res.cloudinary.com/duv5llytn/image/upload/v1/media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg
+            # Queremos: media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg
+            if 'upload/v1/' in image_url:
+                path = image_url.split('upload/v1/')[-1]
+                return request.build_absolute_uri(f'/api/secure-media/{path}')
+        else:
+            # Para desarrollo local
+            # Ejemplo: /media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg
+            # Queremos: clientes/2025/10/07/DOCUMENTO_ANA.jpeg
+            if image_url.startswith('/media/'):
+                path = image_url[7:]  # Remover '/media/'
+            elif image_url.startswith('media/'):
+                path = image_url[6:]  # Remover 'media/'
+            else:
+                # Si no tiene prefijo, asumir que es el path relativo
+                path = image_url
+            
+            return request.build_absolute_uri(f'/api/secure-media/{path}')
+        
+        return None
+    
+    def get_foto_cedula_secure_url(self, obj):
+        return self._get_secure_url(obj.foto_cedula)
+    
+    def get_foto_cliente_secure_url(self, obj):
+        return self._get_secure_url(obj.foto_cliente)
+    
+    def get_foto_cedula_reverso_secure_url(self, obj):
+        return self._get_secure_url(obj.foto_cedula_reverso)
 class CarteraMiembroSerializer(serializers.ModelSerializer):
     usuario_email = serializers.EmailField(source='usuario.email', read_only=True)
     usuario_id    = serializers.PrimaryKeyRelatedField(source='usuario', read_only=True)

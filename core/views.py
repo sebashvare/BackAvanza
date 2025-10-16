@@ -12,6 +12,12 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from .services import generar_calendario, aplicar_pago, actualizar_estado_por_mora
 
+# Importaciones para el proxy de media seguro
+import requests
+from django.http import HttpResponse, Http404
+from django.views.decorators.cache import cache_control
+from django.conf import settings
+
 
 User = get_user_model()
 
@@ -300,3 +306,60 @@ def dashboard_view(request):
             }
     
     return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+@cache_control(max_age=3600)  # Cache por 1 hora
+def secure_media_proxy(request, path):
+    """
+    Proxy seguro para servir archivos media de Cloudinary
+    Solo usuarios autenticados pueden acceder a las imágenes
+    """
+    try:
+        if settings.USE_CLOUDINARY:
+            # Construir URL de Cloudinary
+            cloud_name = settings.CLOUDINARY_STORAGE.get('CLOUD_NAME')
+            if not cloud_name:
+                raise Http404("Configuración de Cloudinary no encontrada")
+            
+            cloudinary_url = f"https://res.cloudinary.com/{cloud_name}/image/upload/v1/{path}"
+            
+            # Hacer request a Cloudinary con timeout
+            response = requests.get(cloudinary_url, timeout=10)
+            
+            if response.status_code == 200:
+                # Determinar content type basado en la extensión
+                content_type = response.headers.get('content-type', 'image/jpeg')
+                
+                # Crear respuesta HTTP con la imagen
+                http_response = HttpResponse(response.content, content_type=content_type)
+                http_response['Content-Length'] = len(response.content)
+                http_response['Cache-Control'] = 'private, max-age=3600'
+                
+                # Headers adicionales de seguridad
+                http_response['X-Content-Type-Options'] = 'nosniff'
+                http_response['X-Frame-Options'] = 'DENY'
+                
+                return http_response
+            else:
+                print(f"Error obteniendo imagen de Cloudinary: {response.status_code}")
+                raise Http404("Archivo no encontrado en Cloudinary")
+        else:
+            # En desarrollo local, servir archivo directamente
+            from django.views.static import serve
+            import os
+            
+            # Verificar que el archivo existe
+            file_path = os.path.join(settings.MEDIA_ROOT, path)
+            if not os.path.exists(file_path):
+                raise Http404("Archivo no encontrado")
+            
+            return serve(request, path, document_root=settings.MEDIA_ROOT)
+            
+    except requests.RequestException as e:
+        print(f"Error de red sirviendo media: {e}")
+        raise Http404("Error al acceder al archivo")
+    except Exception as e:
+        print(f"Error general sirviendo media: {e}")
+        raise Http404("Error al acceder al archivo")
