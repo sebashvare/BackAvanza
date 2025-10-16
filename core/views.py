@@ -314,6 +314,8 @@ def secure_media_proxy(request, path):
     Proxy seguro para servir archivos media de Cloudinary
     Solo usuarios autenticados pueden acceder a las imágenes
     """
+    print(f"🔑 [PROXY] Iniciando proxy para: {path}")
+    
     # Verificación manual de autenticación JWT
     from rest_framework_simplejwt.authentication import JWTAuthentication
     from rest_framework.exceptions import AuthenticationFailed
@@ -322,6 +324,7 @@ def secure_media_proxy(request, path):
     
     # Decodificar la URL (espacios y caracteres especiales)
     decoded_path = unquote(path)
+    print(f"🔓 [PROXY] Path decodificado: {decoded_path}")
     
     try:
         # Autenticar usuario con JWT
@@ -345,14 +348,18 @@ def secure_media_proxy(request, path):
             # Usar path decodificado para construir URL de Cloudinary
             cloudinary_url = f"https://res.cloudinary.com/{cloud_name}/image/upload/v1/{decoded_path}"
             
-            print(f"🔗 Path original recibido: {path}")
-            print(f"🔗 Path decodificado: {decoded_path}")
-            print(f"🔗 URL completa de Cloudinary: {cloudinary_url}")
+            print(f"✅ [PROXY] Accediendo a archivo: {decoded_path}")
+            print(f"🔗 [PROXY] URL de Cloudinary: {cloudinary_url}")
             
             # Hacer request a Cloudinary con timeout
             response = requests.get(cloudinary_url, timeout=10)
             
-            print(f"📊 Status de Cloudinary: {response.status_code}")
+            print(f"📊 [PROXY] Status Cloudinary: {response.status_code}")
+            if response.status_code != 200:
+                print(f"❌ [PROXY] Error en Cloudinary: {response.status_code}")
+                print(f"❌ [PROXY] Respuesta: {response.text[:200]}")
+            else:
+                print(f"✅ [PROXY] Imagen encontrada, sirviendo archivo")
             
             if response.status_code == 200:
                 # Determinar content type basado en la extensión

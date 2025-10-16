@@ -40,25 +40,18 @@ class ClienteSerializer(serializers.ModelSerializer):
         from urllib.parse import quote
         
         image_url = str(image_field)
-        print(f"🔧 [SERIALIZER] Procesando imagen: {image_url}")
         
         if settings.USE_CLOUDINARY and 'cloudinary.com' in image_url:
             # Extraer path completo de URL de Cloudinary (incluyendo extensión)
             # Ejemplo: https://res.cloudinary.com/duv5llytn/image/upload/v1/media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg
             # Queremos: media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg (CON EXTENSIÓN)
             if 'upload/v1/' in image_url:
-                # Dividir por upload/v1/ y tomar todo lo que sigue
+                # Dividir por upload/v1/ y tomar todo lo que sigue (con extensión)
                 path_with_extension = image_url.split('upload/v1/')[-1]
                 
-                print(f"🔍 [SERIALIZER] URL original Cloudinary: {image_url}")
-                print(f"🔍 [SERIALIZER] Path extraído CON extensión: {path_with_extension}")
-                
                 # Codificar caracteres especiales y espacios (manteniendo la extensión)
-                encoded_path = quote(path_with_extension, safe='/.') 
-                secure_url = request.build_absolute_uri(f'/api/secure-media/{encoded_path}')
-                
-                print(f"🔍 [SERIALIZER] URL segura generada: {secure_url}")
-                return secure_url
+                encoded_path = quote(path_with_extension, safe='/.')
+                return request.build_absolute_uri(f'/api/secure-media/{encoded_path}')
         else:
             # Para desarrollo local
             # Ejemplo: /media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg
