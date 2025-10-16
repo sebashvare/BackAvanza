@@ -28,7 +28,7 @@ class ClienteSerializer(serializers.ModelSerializer):
         ]
     
     def _get_secure_url(self, image_field):
-        """Helper para generar URLs seguras"""
+        """Helper para generar URLs seguras con codificación correcta"""
         if not image_field:
             return None
             
@@ -37,6 +37,8 @@ class ClienteSerializer(serializers.ModelSerializer):
             return None
         
         from django.conf import settings
+        from urllib.parse import quote
+        
         image_url = str(image_field)
         
         if settings.USE_CLOUDINARY and 'cloudinary.com' in image_url:
@@ -45,7 +47,15 @@ class ClienteSerializer(serializers.ModelSerializer):
             # Queremos: media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg
             if 'upload/v1/' in image_url:
                 path = image_url.split('upload/v1/')[-1]
-                return request.build_absolute_uri(f'/api/secure-media/{path}')
+                print(f"🔍 [SERIALIZER] URL original Cloudinary: {image_url}")
+                print(f"🔍 [SERIALIZER] Path extraído: {path}")
+                
+                # Codificar caracteres especiales y espacios
+                encoded_path = quote(path, safe='/')
+                secure_url = request.build_absolute_uri(f'/api/secure-media/{encoded_path}')
+                
+                print(f"🔍 [SERIALIZER] URL segura generada: {secure_url}")
+                return secure_url
         else:
             # Para desarrollo local
             # Ejemplo: /media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg
@@ -58,7 +68,9 @@ class ClienteSerializer(serializers.ModelSerializer):
                 # Si no tiene prefijo, asumir que es el path relativo
                 path = image_url
             
-            return request.build_absolute_uri(f'/api/secure-media/{path}')
+            # Codificar caracteres especiales y espacios
+            encoded_path = quote(path, safe='/')
+            return request.build_absolute_uri(f'/api/secure-media/{encoded_path}')
         
         return None
     

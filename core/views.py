@@ -318,6 +318,10 @@ def secure_media_proxy(request, path):
     from rest_framework_simplejwt.authentication import JWTAuthentication
     from rest_framework.exceptions import AuthenticationFailed
     from django.http import JsonResponse
+    from urllib.parse import unquote
+    
+    # Decodificar la URL (espacios y caracteres especiales)
+    decoded_path = unquote(path)
     
     try:
         # Autenticar usuario con JWT
@@ -338,10 +342,17 @@ def secure_media_proxy(request, path):
             if not cloud_name:
                 raise Http404("Configuración de Cloudinary no encontrada")
             
-            cloudinary_url = f"https://res.cloudinary.com/{cloud_name}/image/upload/v1/{path}"
+            # Usar path decodificado para construir URL de Cloudinary
+            cloudinary_url = f"https://res.cloudinary.com/{cloud_name}/image/upload/v1/{decoded_path}"
+            
+            print(f"🔗 Path original recibido: {path}")
+            print(f"🔗 Path decodificado: {decoded_path}")
+            print(f"🔗 URL completa de Cloudinary: {cloudinary_url}")
             
             # Hacer request a Cloudinary con timeout
             response = requests.get(cloudinary_url, timeout=10)
+            
+            print(f"📊 Status de Cloudinary: {response.status_code}")
             
             if response.status_code == 200:
                 # Determinar content type basado en la extensión
@@ -365,12 +376,14 @@ def secure_media_proxy(request, path):
             from django.views.static import serve
             import os
             
-            # Verificar que el archivo existe
-            file_path = os.path.join(settings.MEDIA_ROOT, path)
+            # Verificar que el archivo existe usando path decodificado
+            file_path = os.path.join(settings.MEDIA_ROOT, decoded_path)
             if not os.path.exists(file_path):
+                print(f"❌ Archivo no encontrado en: {file_path}")
                 raise Http404("Archivo no encontrado")
             
-            return serve(request, path, document_root=settings.MEDIA_ROOT)
+            print(f"✅ Sirviendo archivo local: {file_path}")
+            return serve(request, decoded_path, document_root=settings.MEDIA_ROOT)
             
     except AuthenticationFailed as e:
         return JsonResponse({'error': 'Token inválido o expirado'}, status=401)
