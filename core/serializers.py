@@ -9,19 +9,22 @@ User = get_user_model()
 
 class ClienteSerializer(serializers.ModelSerializer):
     # URLs seguras para visualización de imágenes (solo lectura)
-    foto_cedula_secure_url = serializers.SerializerMethodField()
     foto_cliente_secure_url = serializers.SerializerMethodField()
-    foto_cedula_reverso_secure_url = serializers.SerializerMethodField()
+    foto_dni_1_secure_url = serializers.SerializerMethodField()
+    foto_dni_2_secure_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Cliente
         fields = [
             'id', 'nombre', 'identificacion', 'telefono', 'direccion', 'direccion_laboral',
-            'activo', 'garante_nombre', 'garante_telefono', 'created_at', 'updated_at',
+            'email', 'red_social', 'activo', 'created_at',
+            # Datos del garante
+            'garante_identificacion', 'garante_nombre', 'garante_apellido', 
+            'garante_direccion', 'garante_telefono',
             # Campos originales de archivos (para subida)
-            'foto_cedula', 'foto_cliente', 'foto_cedula_reverso',
+            'foto_cliente', 'foto_dni_1', 'foto_dni_2',
             # URLs seguras (para visualización)
-            'foto_cedula_secure_url', 'foto_cliente_secure_url', 'foto_cedula_reverso_secure_url'
+            'foto_cliente_secure_url', 'foto_dni_1_secure_url', 'foto_dni_2_secure_url'
         ]
     
     def _get_secure_url(self, image_field):
@@ -59,14 +62,14 @@ class ClienteSerializer(serializers.ModelSerializer):
         
         return None
     
-    def get_foto_cedula_secure_url(self, obj):
-        return self._get_secure_url(obj.foto_cedula)
-    
     def get_foto_cliente_secure_url(self, obj):
         return self._get_secure_url(obj.foto_cliente)
     
-    def get_foto_cedula_reverso_secure_url(self, obj):
-        return self._get_secure_url(obj.foto_cedula_reverso)
+    def get_foto_dni_1_secure_url(self, obj):
+        return self._get_secure_url(obj.foto_dni_1)
+    
+    def get_foto_dni_2_secure_url(self, obj):
+        return self._get_secure_url(obj.foto_dni_2)
 class CarteraMiembroSerializer(serializers.ModelSerializer):
     usuario_email = serializers.EmailField(source='usuario.email', read_only=True)
     usuario_id    = serializers.PrimaryKeyRelatedField(source='usuario', read_only=True)

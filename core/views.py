@@ -308,15 +308,30 @@ def dashboard_view(request):
     return Response(data)
 
 
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 @cache_control(max_age=3600)  # Cache por 1 hora
 def secure_media_proxy(request, path):
     """
     Proxy seguro para servir archivos media de Cloudinary
     Solo usuarios autenticados pueden acceder a las imágenes
     """
+    # Verificación manual de autenticación JWT
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework.exceptions import AuthenticationFailed
+    from django.http import JsonResponse
+    
     try:
+        # Autenticar usuario con JWT
+        jwt_auth = JWTAuthentication()
+        auth_result = jwt_auth.authenticate(request)
+        
+        if not auth_result:
+            return JsonResponse({'error': 'Token de autenticación requerido'}, status=401)
+        
+        user, token = auth_result
+        if not user.is_authenticated:
+            return JsonResponse({'error': 'Usuario no autenticado'}, status=401)
+            
+        # Servir archivo si está autenticado
         if settings.USE_CLOUDINARY:
             # Construir URL de Cloudinary
             cloud_name = settings.CLOUDINARY_STORAGE.get('CLOUD_NAME')
@@ -357,6 +372,8 @@ def secure_media_proxy(request, path):
             
             return serve(request, path, document_root=settings.MEDIA_ROOT)
             
+    except AuthenticationFailed as e:
+        return JsonResponse({'error': 'Token inválido o expirado'}, status=401)
     except requests.RequestException as e:
         print(f"Error de red sirviendo media: {e}")
         raise Http404("Error al acceder al archivo")
