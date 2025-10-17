@@ -1,5 +1,6 @@
 # core/views.py
 from rest_framework import viewsets, permissions,status
+from rest_framework.permissions import IsAuthenticated
 from django.db.models import QuerySet
 from django.db import connection
 from .models import Cliente, Cartera, Pago, Prestamo, Interes, Prestamo, Cuota, Pago
@@ -308,6 +309,18 @@ def dashboard_view(request):
     return Response(data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def test_auth(request):
+    """Endpoint para testear si la autenticación JWT funciona correctamente"""
+    return Response({
+        'authenticated': True,
+        'user': request.user.username,
+        'user_id': request.user.id,
+        'message': 'Autenticación exitosa'
+    })
+
+
 @cache_control(max_age=3600)  # Cache por 1 hora
 def secure_media_proxy(request, path):
     """
@@ -332,17 +345,28 @@ def secure_media_proxy(request, path):
         auth_result = jwt_auth.authenticate(request)
         
         if not auth_result:
-            return JsonResponse({'error': 'Token de autenticación requerido'}, status=401)
+            print(f"❌ [PROXY] No se encontró token de autenticación")
+            print(f"❌ [PROXY] Headers disponibles: {list(request.headers.keys())}")
+            auth_header = request.headers.get('Authorization')
+            print(f"❌ [PROXY] Authorization header: {auth_header}")
+            return JsonResponse({
+                'error': 'Token de autenticación requerido',
+                'details': 'No se encontró el header Authorization con un token JWT válido'
+            }, status=401)
         
         user, token = auth_result
         if not user.is_authenticated:
+            print(f"❌ [PROXY] Usuario no autenticado: {user}")
             return JsonResponse({'error': 'Usuario no autenticado'}, status=401)
+        
+        print(f"✅ [PROXY] Usuario autenticado: {user.username}")
             
         # Servir archivo si está autenticado
         if settings.USE_CLOUDINARY:
             # Construir URL de Cloudinary
             cloud_name = settings.CLOUDINARY_STORAGE.get('CLOUD_NAME')
             if not cloud_name:
+                print(f"❌ [PROXY] Configuración de Cloudinary no encontrada")
                 raise Http404("Configuración de Cloudinary no encontrada")
             
             # Usar path decodificado para construir URL de Cloudinary
@@ -393,10 +417,22 @@ def secure_media_proxy(request, path):
             return serve(request, decoded_path, document_root=settings.MEDIA_ROOT)
             
     except AuthenticationFailed as e:
-        return JsonResponse({'error': 'Token inválido o expirado'}, status=401)
+        print(f"❌ [PROXY] Error de autenticación: {e}")
+        return JsonResponse({
+            'error': 'Token inválido o expirado',
+            'details': str(e)
+        }, status=401)
     except requests.RequestException as e:
-        print(f"Error de red sirviendo media: {e}")
-        raise Http404("Error al acceder al archivo")
+        print(f"❌ [PROXY] Error de red sirviendo media: {e}")
+        return JsonResponse({
+            'error': 'Error al acceder al archivo',
+            'details': 'Error de conexión con Cloudinary'
+        }, status=503)
     except Exception as e:
-        print(f"Error general sirviendo media: {e}")
-        raise Http404("Error al acceder al archivo")
+        print(f"❌ [PROXY] Error general sirviendo media: {e}")
+        import traceback
+        print(f"❌ [PROXY] Traceback: {traceback.format_exc()}")
+        return JsonResponse({
+            'error': 'Error interno del servidor',
+            'details': str(e)
+        }, status=500)

@@ -36,6 +36,11 @@ class ClienteSerializer(serializers.ModelSerializer):
         if not request:
             return None
         
+        # Verificar si el usuario está autenticado
+        if not request.user or not request.user.is_authenticated:
+            # Si no está autenticado, retornar la URL pública directa
+            return str(image_field)
+        
         from django.conf import settings
         from urllib.parse import quote
         
@@ -52,6 +57,9 @@ class ClienteSerializer(serializers.ModelSerializer):
                 # Codificar caracteres especiales y espacios (manteniendo la extensión)
                 encoded_path = quote(path_with_extension, safe='/.')
                 return request.build_absolute_uri(f'/api/secure-media/{encoded_path}')
+            else:
+                # Si no se puede procesar para proxy, retornar URL pública
+                return image_url
         else:
             # Para desarrollo local
             # Ejemplo: /media/clientes/2025/10/07/DOCUMENTO_ANA.jpeg
