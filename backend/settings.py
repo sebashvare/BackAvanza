@@ -13,11 +13,19 @@ if os.path.exists(Path(__file__).resolve().parent.parent / '.env'):
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- Seguridad / entorno
-# En Render: define SECRET_KEY en Environment
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-key")  # <-- cámbiala en prod
+# En Render: define SECRET_KEY en Environment (OBLIGATORIO)
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    if os.getenv("DEBUG", "False").lower() == "true":
+        # Solo en desarrollo local permitir clave por defecto
+        SECRET_KEY = "dev-insecure-key-only-for-localhost"
+        print("⚠️  [WARNING] Usando SECRET_KEY por defecto - SOLO para desarrollo local")
+    else:
+        # En producción es OBLIGATORIO definir SECRET_KEY
+        raise ValueError("SECRET_KEY no está definida en variables de entorno. Define SECRET_KEY en tu plataforma de hosting.")
 
-# Detectar entorno: True si estamos en desarrollo local
-DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+# Detectar entorno: False por defecto (producción)
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 # Hosts permitidos (Render + Vercel + localhost)
 ALLOWED_HOSTS = [
@@ -169,25 +177,57 @@ else:
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- CORS / CSRF
-CORS_ALLOWED_ORIGINS = [
-    o.strip() for o in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        # Prod:
-        # "https://front-avanza.vercel.app"
-        # Dev (descomenta estas para localhost):
-        ",http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
-    ).split(",") if o.strip()
-]
+# En producción, CORS debe ser restrictivo y solo permitir el frontend real
+if DEBUG:
+    # Desarrollo: permitir localhost en varios puertos
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173", 
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",  # Next.js
+        "http://127.0.0.1:3000"
+    ]
+    print("🔧 [DESARROLLO] CORS permitido para localhost en múltiples puertos")
+else:
+    # Producción: solo dominios específicos y verificados
+    CORS_ALLOWED_ORIGINS = [
+        o.strip() for o in os.getenv(
+            "CORS_ALLOWED_ORIGINS",
+            "https://front-avanza.vercel.app"  # Solo tu frontend real
+        ).split(",") if o.strip()
+    ]
+    print(f"🔒 [PRODUCCIÓN] CORS restringido a: {CORS_ALLOWED_ORIGINS}")
+
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     u.strip() for u in os.getenv(
         "CSRF_TRUSTED_ORIGINS",
         "https://backavanza.onrender.com,https://front-avanza.vercel.app"
-        # Dev (descomenta si usas sesión/CSRF desde localhost):
-        # ",http://localhost:5173,http://127.0.0.1:5173"
     ).split(",") if u.strip()
 ]
+
+# Validar configuración crítica en producción
+if not DEBUG:
+    # Verificar que las variables críticas estén configuradas
+    required_env_vars = {
+        'DATABASE_URL': 'URL de base de datos PostgreSQL',
+        'CLOUDINARY_CLOUD_NAME': 'Nombre del cloud de Cloudinary', 
+        'CLOUDINARY_API_KEY': 'API Key de Cloudinary',
+        'CLOUDINARY_API_SECRET': 'API Secret de Cloudinary'
+    }
+    
+    missing_vars = []
+    for var, description in required_env_vars.items():
+        if not os.getenv(var):
+            missing_vars.append(f"{var} ({description})")
+    
+    if missing_vars:
+        raise ValueError(
+            f"Variables de entorno faltantes para producción:\n" + 
+            "\n".join(f"- {var}" for var in missing_vars)
+        )
 
 # --- DRF
 REST_FRAMEWORK = {
@@ -236,7 +276,40 @@ else:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     
+    # Configuración adicional de seguridad HTTPS
+    SECURE_HSTS_SECONDS = 31536000  # 1 año
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
+    
     # Cookies cross-site (front en Vercel, backend en Render)
     SESSION_COOKIE_SAMESITE = "None"
     CSRF_COOKIE_SAMESITE = "None"
+
+# --- Logging para producción
+if not DEBUG:
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'level': 'INFO',
+            },
+        },
+        'loggers': {
+            'django': {
+                'handlers': ['console'],
+                'level': 'INFO',
+                'propagate': True,
+            },
+            'core': {  # Logs de tu app
+                'handlers': ['console'],
+                'level': 'INFO',
+                'propagate': True,
+            },
+        },
+    }
 
