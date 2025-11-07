@@ -3,11 +3,12 @@ from rest_framework import viewsets, permissions,status
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import QuerySet
 from django.db import connection
-from .models import Cliente, Cartera, Pago, Prestamo, Interes, Prestamo, Cuota, Pago
+from .models import Cliente, Cartera, Pago, Prestamo, Interes, Prestamo, Cuota, Pago, PagoDetalle
 from .serializers import ClienteSerializer, CarteraSerializer, PrestamoSerializer, PagoSerializer, InteresSerializer, PrestamoSerializer, CuotaSerializer, PagoSerializer
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from rest_framework.decorators import action, api_view, permission_classes
+from django.utils import timezone
 from .permissions import IsCarteraMemberOrAdmin, IsSystemAdmin, IsMemberOfCarteraOrAdmin,es_admin
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -236,88 +237,251 @@ def actualizar_estados_view(request):
         }, status=500)
 
 @api_view(["GET"])
-@permission_classes([permissions.AllowAny])  # Ajusta según tus necesidades de permisos
+@permission_classes([IsAuthenticated])  # Ahora requiere autenticación
 def dashboard_view(request):
     """
-    Endpoint para obtener métricas del dashboard:
+    Endpoint para obtener métricas del dashboard por cartera del usuario autenticado:
     - Dinero disponible (total cobrado)
-    - Cartera por cobrar contable
+    - Cartera por cobrar contable  
     - Saldo contractual pendiente
     - Clientes activos
-    """
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            WITH
-            pagos AS (
-              SELECT 
-                SUM(COALESCE(d.capital_aplicado,0) + COALESCE(d.interes_aplicado,0)) AS cobrado_total
-              FROM pagos_detalle d
-            ),
-            cuotas_base AS (
-              SELECT
-                c.id,
-                c.capital_programado,
-                c.interes_programado,
-                c.fecha_vencimiento,
-                COALESCE(pd.cap_apl, 0) AS cap_apl,
-                COALESCE(pd.int_apl, 0) AS int_apl
-              FROM cuotas c
-              LEFT JOIN (
-                SELECT 
-                  cuota_id,
-                  SUM(COALESCE(capital_aplicado,0)) AS cap_apl,
-                  SUM(COALESCE(interes_aplicado,0)) AS int_apl
-                FROM pagos_detalle
-                GROUP BY cuota_id
-              ) pd ON pd.cuota_id = c.id
-            ),
-            saldos AS (
-              SELECT
-                SUM(capital_programado - cap_apl) AS saldo_capital_pendiente,
-                SUM(CASE WHEN DATE(fecha_vencimiento) <= CURRENT_DATE
-                         THEN interes_programado - int_apl
-                         ELSE 0 END) AS interes_devengado_pendiente,
-                SUM((capital_programado - cap_apl) + (interes_programado - int_apl)) AS saldo_contractual_pendiente
-              FROM cuotas_base
-            )
-            SELECT
-              COALESCE((SELECT cobrado_total FROM pagos), 0)                                           AS dinero_disponible,
-              COALESCE(saldo_capital_pendiente, 0) + COALESCE(interes_devengado_pendiente, 0)         AS cartera_por_cobrar_contable,
-              COALESCE(saldo_contractual_pendiente, 0)                                                AS saldo_contractual_pendiente,
-              (SELECT COUNT(*) FROM clientes WHERE activo IS TRUE)                                     AS clientes_activos
-            FROM saldos;
-        """)
-        
-        row = cursor.fetchone()
-        
-        if row:
-            data = {
-                'dinero_disponible': float(row[0]) if row[0] else 0.0,
-                'cartera_por_cobrar_contable': float(row[1]) if row[1] else 0.0,
-                'saldo_contractual_pendiente': float(row[2]) if row[2] else 0.0,
-                'clientes_activos': int(row[3]) if row[3] else 0
-            }
-        else:
-            # Valores por defecto si no hay datos
-            data = {
-                'dinero_disponible': 0.0,
-                'cartera_por_cobrar_contable': 0.0,
-                'saldo_contractual_pendiente': 0.0,
-                'clientes_activos': 0
-            }
     
-    return Response(data)
+    Retorna métricas para cada cartera donde el usuario es miembro.
+    
+    Parámetros opcionales:
+    - cartera_id: UUID de una cartera específica (debe ser miembro)
+    """
+    user = request.user
+    cartera_id = request.GET.get('cartera_id')
+    
+    try:
+        # Obtener carteras donde el usuario es miembro
+        from .models import Cartera, CarteraMiembro
+        carteras_usuario = Cartera.objects.filter(
+            asignaciones__usuario=user
+        ).select_related().prefetch_related('asignaciones')
+        
+        if not carteras_usuario.exists():
+            return Response({
+                'message': 'No tienes carteras asignadas',
+                'carteras': []
+            })
+        
+        # Si se especifica una cartera, validar que el usuario sea miembro
+        if cartera_id:
+            try:
+                from uuid import UUID
+                cartera_uuid = UUID(cartera_id)
+                cartera_especifica = carteras_usuario.filter(id=cartera_uuid).first()
+                if not cartera_especifica:
+                    return Response({
+                        'error': 'No tienes acceso a esta cartera o no existe',
+                        'cartera_id': cartera_id
+                    }, status=403)
+                carteras_usuario = [cartera_especifica]
+            except ValueError:
+                return Response({
+                    'error': 'cartera_id debe ser un UUID válido',
+                    'cartera_id': cartera_id
+                }, status=400)
+        
+        # Calcular métricas para cada cartera
+        resultados = []
+        
+        for cartera in carteras_usuario:
+            try:
+                # Usar Django ORM para cálculos más confiables y compatibles entre BD
+                from django.db.models import Sum, Count, Q, F, Case, When, DecimalField, Value
+                from django.db.models.functions import Coalesce
+                from decimal import Decimal
+                from datetime import date
+                
+                # 1. Dinero disponible (total cobrado) - Compatible con PostgreSQL y SQLite
+                dinero_disponible = PagoDetalle.objects.filter(
+                    cuota__prestamo__cartera=cartera
+                ).aggregate(
+                    total=Coalesce(
+                        Sum(F('capital_aplicado') + F('interes_aplicado')), 
+                        Value(0, output_field=DecimalField())
+                    )
+                )['total']
+                
+                # 2. Cálculos de saldos pendientes - Optimizado para PostgreSQL
+                cuotas_con_pagos = Cuota.objects.filter(
+                    prestamo__cartera=cartera
+                ).annotate(
+                    capital_aplicado_total=Coalesce(
+                        Sum('aplicaciones__capital_aplicado'), 
+                        Value(0, output_field=DecimalField())
+                    ),
+                    interes_aplicado_total=Coalesce(
+                        Sum('aplicaciones__interes_aplicado'), 
+                        Value(0, output_field=DecimalField())
+                    ),
+                    capital_pendiente=F('capital_programado') - F('capital_aplicado_total'),
+                    interes_pendiente=F('interes_programado') - F('interes_aplicado_total'),
+                    esta_vencido=Case(
+                        When(fecha_vencimiento__lte=date.today(), then=Value(True)),
+                        default=Value(False),
+                        output_field=DecimalField()
+                    )
+                )
+                
+                # Calcular totales usando agregaciones optimizadas
+                saldos = cuotas_con_pagos.aggregate(
+                    capital_pendiente_total=Coalesce(
+                        Sum('capital_pendiente'), 
+                        Value(0, output_field=DecimalField())
+                    ),
+                    interes_devengado_total=Coalesce(
+                        Sum(Case(
+                            When(fecha_vencimiento__lte=date.today(), 
+                                 then='interes_pendiente'),
+                            default=Value(0, output_field=DecimalField())
+                        )), 
+                        Value(0, output_field=DecimalField())
+                    ),
+                    interes_pendiente_total=Coalesce(
+                        Sum('interes_pendiente'), 
+                        Value(0, output_field=DecimalField())
+                    )
+                )
+                
+                capital_pendiente = saldos['capital_pendiente_total']
+                interes_devengado = saldos['interes_devengado_total'] 
+                interes_pendiente_total = saldos['interes_pendiente_total']
+                
+                # 3. Métricas finales
+                cartera_por_cobrar = capital_pendiente + interes_devengado
+                saldo_contractual = capital_pendiente + interes_pendiente_total
+                
+                # 4. Clientes activos - Compatible con ambas BD
+                clientes_activos = Cliente.objects.filter(
+                    prestamos__cartera=cartera,
+                    activo=True
+                ).distinct().count()
+                
+                # Obtener rol del usuario en esta cartera
+                asignacion = cartera.asignaciones.filter(usuario=user).first()
+                rol_usuario = asignacion.rol if asignacion else None
+                
+                cartera_data = {
+                    'cartera': {
+                        'id': str(cartera.id),
+                        'nombre': cartera.nombre,
+                        'descripcion': cartera.descripcion,
+                        'rol_usuario': rol_usuario
+                    },
+                    'metricas': {
+                        'dinero_disponible': float(dinero_disponible),
+                        'cartera_por_cobrar_contable': float(cartera_por_cobrar),
+                        'saldo_contractual_pendiente': float(saldo_contractual),
+                        'clientes_activos': clientes_activos
+                    }
+                }
+                
+                resultados.append(cartera_data)
+                    
+            except Exception as e:
+                return Response({
+                    'error': 'Error procesando cartera',
+                    'mensaje': str(e)
+                }, status=500)
+        
+        # Preparar respuesta
+        response_data = {
+            'usuario': {
+                'id': user.id,
+                'username': user.username,
+                'nombre_completo': f"{user.first_name} {user.last_name}".strip()
+            },
+            'tipo_consulta': 'cartera_especifica' if cartera_id else 'carteras_usuario',
+            'total_carteras': len(resultados),
+            'carteras': resultados
+        }
+        
+        # Si es una cartera específica, simplificar la respuesta
+        if cartera_id and resultados:
+            cartera_data = resultados[0]
+            response_data = {
+                **response_data,
+                'cartera_seleccionada': cartera_data['cartera'],
+                'metricas': cartera_data['metricas']
+            }
+        
+        return Response(response_data)
+        
+    except Exception as e:
+        return Response({
+            'error': 'Error interno del servidor',
+            'mensaje': str(e)
+        }, status=500)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def test_auth(request):
     """Endpoint para testear si la autenticación JWT funciona correctamente"""
+    
+    # Headers recibidos
+    headers_info = {}
+    for key, value in request.META.items():
+        if key.startswith('HTTP_'):
+            header_name = key[5:].replace('_', '-').title()
+            if 'authorization' in header_name.lower():
+                headers_info[header_name] = value[:50] + '...' if len(value) > 50 else value
+            elif header_name in ['Content-Type', 'Accept', 'User-Agent', 'Origin']:
+                headers_info[header_name] = value
+    
     return Response({
         'authenticated': True,
         'user': request.user.username,
         'user_id': request.user.id,
-        'message': 'Autenticación exitosa'
+        'message': 'Autenticación exitosa',
+        'debug_info': {
+            'headers_received': headers_info,
+            'request_method': request.method,
+            'request_path': request.path,
+            'has_auth_header': 'HTTP_AUTHORIZATION' in request.META,
+            'user_is_authenticated': request.user.is_authenticated,
+            'user_is_anonymous': request.user.is_anonymous,
+        }
+    })
+
+
+@api_view(['GET']) 
+@permission_classes([permissions.AllowAny])
+def debug_frontend(request):
+    """Endpoint público para diagnosticar problemas del frontend"""
+    
+    # Headers recibidos
+    headers_info = {}
+    for key, value in request.META.items():
+        if key.startswith('HTTP_'):
+            header_name = key[5:].replace('_', '-').title()
+            headers_info[header_name] = value[:100] + '...' if len(value) > 100 else value
+    
+    return Response({
+        'message': 'Endpoint de debug - Frontend puede acceder sin autenticación',
+        'timestamp': timezone.now().isoformat(),
+        'headers_received': headers_info,
+        'request_info': {
+            'method': request.method,
+            'path': request.path,
+            'query_params': dict(request.GET),
+            'user': str(request.user),
+            'is_authenticated': request.user.is_authenticated,
+        },
+        'instructions': {
+            'next_step': 'Intenta hacer login y luego llamar a /api/dashboard/',
+            'expected_header': 'Authorization: Bearer <tu-token-jwt>',
+            'test_endpoints': [
+                'POST /api/token/ (login)',
+                'GET /api/me/ (requiere auth)',
+                'GET /api/dashboard/ (requiere auth)',
+                'GET /api/test-auth/ (requiere auth)',
+            ]
+        }
     })
 
 
