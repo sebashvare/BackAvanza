@@ -13,7 +13,13 @@ CLOUDINARY_CLOUD_NAME=tu_cloud_name
 CLOUDINARY_API_KEY=123456789012345  
 CLOUDINARY_API_SECRET=tu_api_secret
 CORS_ALLOWED_ORIGINS=https://front-avanza.vercel.app
+CSRF_TRUSTED_ORIGINS=https://backavanza.onrender.com,https://front-avanza.vercel.app
 ```
+
+**⚠️ IMPORTANTE para CORS:**
+- En Render, agrega exactamente: `CORS_ALLOWED_ORIGINS=https://front-avanza.vercel.app`
+- NO incluyas espacios ni comillas
+- Usa la URL exacta de tu frontend en Vercel
 
 ### 2. Configuración de Render:
 
@@ -73,18 +79,34 @@ gunicorn backend.wsgi:application
 ## 🔧 COMANDOS DE VERIFICACIÓN POST-DEPLOY:
 
 ```bash
-# Verificar configuración
-curl https://tu-backend.onrender.com/api/debug-frontend/
+# 1. Verificar configuración CORS y debug
+curl https://backavanza.onrender.com/api/debug-frontend/
 
-# Test de autenticación  
-curl -X POST https://tu-backend.onrender.com/api/token/ \
+# 2. Test de preflight CORS (OPTIONS)
+curl -X OPTIONS https://backavanza.onrender.com/api/token/ \
+  -H "Origin: https://front-avanza.vercel.app" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Content-Type" -v
+
+# 3. Test de autenticación
+curl -X POST https://backavanza.onrender.com/api/token/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"tu_usuario","password":"tu_password"}'
+  -H "Origin: https://front-avanza.vercel.app" \
+  -d '{"username":"tu_usuario","password":"tu_password"}' -v
 
-# Test dashboard (con token)
-curl https://tu-backend.onrender.com/api/dashboard/ \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+# 4. Test dashboard (con token)
+curl https://backavanza.onrender.com/api/dashboard/ \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Origin: https://front-avanza.vercel.app" -v
 ```
+
+### ⚠️ DIAGNÓSTICO DE ERRORES CORS:
+
+**Error**: `No 'Access-Control-Allow-Origin' header`
+**Solución**: 
+1. Verificar que `CORS_ALLOWED_ORIGINS` esté configurado en Environment de Render
+2. Usar la URL exacta del frontend (https://front-avanza.vercel.app)
+3. Verificar que `corsheaders` esté antes de `CommonMiddleware` en MIDDLEWARE
 
 ## 📝 VARIABLES DE ENTORNO COMPLETAS:
 

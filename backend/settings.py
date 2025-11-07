@@ -190,16 +190,42 @@ if DEBUG:
     ]
     print("🔧 [DESARROLLO] CORS permitido para localhost en múltiples puertos")
 else:
-    # Producción: solo dominios específicos y verificados
-    CORS_ALLOWED_ORIGINS = [
-        o.strip() for o in os.getenv(
-            "CORS_ALLOWED_ORIGINS",
-            "https://front-avanza.vercel.app"  # Solo tu frontend real
-        ).split(",") if o.strip()
-    ]
-    print(f"🔒 [PRODUCCIÓN] CORS restringido a: {CORS_ALLOWED_ORIGINS}")
+    # Producción: configuración más explícita y robusta
+    cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    if cors_origins_env:
+        CORS_ALLOWED_ORIGINS = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+    else:
+        # Fallback: dominios por defecto conocidos
+        CORS_ALLOWED_ORIGINS = [
+            "https://front-avanza.vercel.app",
+            "https://frontavanza.vercel.app",  # Por si acaso hay variaciones
+        ]
+    
+    print(f"🔒 [PRODUCCIÓN] CORS configurado para: {CORS_ALLOWED_ORIGINS}")
+    print(f"🔍 [PRODUCCIÓN] Variable CORS_ALLOWED_ORIGINS: '{cors_origins_env}'")
 
+# Configuración adicional de CORS para asegurar compatibilidad
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False  # Explícitamente False para seguridad
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+CORS_ALLOWED_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH', 
+    'POST',
+    'PUT',
+]
 
 CSRF_TRUSTED_ORIGINS = [
     u.strip() for u in os.getenv(

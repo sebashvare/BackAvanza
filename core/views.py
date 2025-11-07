@@ -461,6 +461,9 @@ def debug_frontend(request):
             header_name = key[5:].replace('_', '-').title()
             headers_info[header_name] = value[:100] + '...' if len(value) > 100 else value
     
+    # Importar settings para ver configuración actual
+    from django.conf import settings
+    
     return Response({
         'message': 'Endpoint de debug - Frontend puede acceder sin autenticación',
         'timestamp': timezone.now().isoformat(),
@@ -471,6 +474,11 @@ def debug_frontend(request):
             'query_params': dict(request.GET),
             'user': str(request.user),
             'is_authenticated': request.user.is_authenticated,
+        },
+        'cors_config': {
+            'CORS_ALLOWED_ORIGINS': getattr(settings, 'CORS_ALLOWED_ORIGINS', 'NO CONFIGURADO'),
+            'CORS_ALLOW_CREDENTIALS': getattr(settings, 'CORS_ALLOW_CREDENTIALS', 'NO CONFIGURADO'),
+            'DEBUG': getattr(settings, 'DEBUG', 'NO CONFIGURADO'),
         },
         'instructions': {
             'next_step': 'Intenta hacer login y luego llamar a /api/dashboard/',
@@ -483,6 +491,87 @@ def debug_frontend(request):
             ]
         }
     })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def debug_login(request):
+    """Endpoint para diagnosticar problemas específicos de login en producción"""
+    from django.contrib.auth import authenticate
+    from django.conf import settings
+    
+    # Obtener datos del request
+    try:
+        username = request.data.get('username', '')
+        password = request.data.get('password', '')
+        
+        debug_info = {
+            'timestamp': timezone.now().isoformat(),
+            'request_data_received': {
+                'username': username,
+                'password_length': len(password) if password else 0,
+                'has_username': bool(username),
+                'has_password': bool(password)
+            },
+            'django_settings': {
+                'DEBUG': settings.DEBUG,
+                'DATABASE_ENGINE': settings.DATABASES['default']['ENGINE'],
+                'USE_TZ': settings.USE_TZ,
+                'AUTH_PASSWORD_VALIDATORS': len(settings.AUTH_PASSWORD_VALIDATORS)
+            },
+            'user_check': None,
+            'authentication_result': None,
+            'error': None
+        }
+        
+        # Verificar si el usuario existe
+        if username:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            try:
+                user_exists = User.objects.filter(username=username).exists()
+                user_is_active = None
+                if user_exists:
+                    user = User.objects.get(username=username)
+                    user_is_active = user.is_active
+                    
+                debug_info['user_check'] = {
+                    'exists': user_exists,
+                    'is_active': user_is_active,
+                    'user_count_total': User.objects.count()
+                }
+            except Exception as e:
+                debug_info['user_check'] = {'error': str(e)}
+        
+        # Intentar autenticación si tenemos credenciales
+        if username and password:
+            try:
+                user = authenticate(username=username, password=password)
+                debug_info['authentication_result'] = {
+                    'success': user is not None,
+                    'user_id': user.id if user else None,
+                    'user_username': user.username if user else None
+                }
+            except Exception as e:
+                debug_info['authentication_result'] = {'error': str(e)}
+        
+        return Response({
+            'message': 'Diagnóstico de login completado',
+            'debug_info': debug_info,
+            'recommendations': [
+                'Verifica que el usuario existe en la base de datos',
+                'Confirma que la contraseña es correcta',
+                'Revisa que el usuario esté activo (is_active=True)',
+                'Usa este endpoint solo para debugging, no en producción real'
+            ]
+        })
+        
+    except Exception as e:
+        return Response({
+            'message': 'Error durante diagnóstico de login',
+            'error': str(e),
+            'timestamp': timezone.now().isoformat()
+        }, status=500)
 
 
 @cache_control(max_age=3600)  # Cache por 1 hora
