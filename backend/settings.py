@@ -200,16 +200,26 @@ else:
             "https://front-avanza.vercel.app",
             "https://frontavanza.vercel.app",  # Por si acaso hay variaciones
         ]
+        # 🚨 TEMPORAL: Si no hay variable configurada, permitir todo para diagnosticar
+        print("🚨 [WARNING] CORS_ALLOWED_ORIGINS no configurada - usando fallback temporal")
+        print("� [WARNING] ACTIVANDO CORS_ALLOW_ALL_ORIGINS temporalmente para debug")
+        CORS_ALLOW_ALL_ORIGINS = True  # ⚠️ TEMPORAL SOLO PARA DEBUG
     
-    print(f"🔒 [PRODUCCIÓN] CORS configurado para: {CORS_ALLOWED_ORIGINS}")
+    print(f"�🔒 [PRODUCCIÓN] CORS configurado para: {CORS_ALLOWED_ORIGINS}")
     print(f"🔍 [PRODUCCIÓN] Variable CORS_ALLOWED_ORIGINS: '{cors_origins_env}'")
+    print(f"🔍 [PRODUCCIÓN] CORS_ALLOW_ALL_ORIGINS: {globals().get('CORS_ALLOW_ALL_ORIGINS', False)}")
 
 # Configuración adicional de CORS para asegurar compatibilidad
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False  # Explícitamente False para seguridad
+
+# ⚠️ CORS_ALLOW_ALL_ORIGINS se configura dinámicamente arriba según si hay variable de entorno
+# Solo se activa si no hay CORS_ALLOWED_ORIGINS configurada
+if not globals().get('CORS_ALLOW_ALL_ORIGINS', False):
+    CORS_ALLOW_ALL_ORIGINS = False  # Explícitamente False para seguridad
+
 CORS_ALLOWED_HEADERS = [
     'accept',
-    'accept-encoding',
+    'accept-encoding', 
     'authorization',
     'content-type',
     'dnt',

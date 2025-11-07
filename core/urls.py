@@ -1,7 +1,7 @@
 # core/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ClienteViewSet, CarteraViewSet, PrestamoViewSet, PagoViewSet, InteresViewSet, PrestamoViewSet, CuotaViewSet, PagoViewSet, dashboard_view, actualizar_estados_view, secure_media_proxy, test_auth
+from .views import ClienteViewSet, CarteraViewSet, PrestamoViewSet, PagoViewSet, InteresViewSet, PrestamoViewSet, CuotaViewSet, PagoViewSet, dashboard_view, actualizar_estados_view, secure_media_proxy, test_auth, debug_frontend
 from rest_framework_simplejwt.views import (TokenObtainPairView, TokenRefreshView, TokenVerifyView)
 
 router = DefaultRouter()
@@ -18,6 +18,7 @@ urlpatterns = [
     path('actualizar-estados/', actualizar_estados_view, name='actualizar-estados'),
     path('secure-media/<path:path>', secure_media_proxy, name='secure-media'),
     path('test-auth/', test_auth, name='test-auth'),
+    path('debug-frontend/', debug_frontend, name='debug-frontend'),
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
